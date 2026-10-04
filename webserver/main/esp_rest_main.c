@@ -13,6 +13,7 @@
 #include "mdns.h"
 #include "lwip/apps/netbiosns.h"
 #include "protocol_examples_common.h"
+#include "led_controller.h"
 
 #define MDNS_INSTANCE "dashboard web server"
 #define MDNS_HOST_NAME CONFIG_EXAMPLE_MDNS_HOST_NAME
@@ -72,6 +73,7 @@ esp_err_t init_fs(void)
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(IOLEDInitialize());
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

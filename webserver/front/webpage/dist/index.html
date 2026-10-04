@@ -1,17 +1,198 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="anonymous">
-    <link rel="preload" as="style" onload="this.rel=&#39;stylesheet&#39;" href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700;900&amp;display=swap">
-
     <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPIO Dashboard</title>
-    <script type="module" crossorigin src="/assets/index-za8vxT5o.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-rRPk6Dz6.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10131d">
+    <title>LED Control</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #10131d;
+        color: #f4f6fb;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(ellipse at 50% 0%, rgba(72, 91, 151, .24), transparent 55%),
+          #10131d;
+      }
+
+      .panel {
+        width: min(100%, 440px);
+        padding: 38px;
+        border: 1px solid rgba(255, 255, 255, .09);
+        border-radius: 28px;
+        background: rgba(26, 30, 43, .92);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, .38);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: #a9b3cb;
+        font-size: .75rem;
+        font-weight: 700;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 8vw, 2.6rem);
+        letter-spacing: -.055em;
+      }
+
+      .intro {
+        margin: 12px 0 28px;
+        color: #a9b0c2;
+        line-height: 1.6;
+      }
+
+      .light-display {
+        display: grid;
+        justify-items: center;
+        gap: 16px;
+        margin: 0 0 28px;
+        padding: 26px;
+        border: 1px solid rgba(255, 255, 255, .07);
+        border-radius: 20px;
+        background: #171b27;
+      }
+
+      .bulb {
+        display: grid;
+        width: 112px;
+        height: 112px;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, .1);
+        border-radius: 50%;
+        background: #242a39;
+        color: #81899d;
+        transition: background .25s ease, color .25s ease, box-shadow .25s ease;
+      }
+
+      .bulb svg { width: 48px; height: 48px; }
+      .bulb.is-on {
+        background: #f5c95f;
+        color: #49350a;
+        box-shadow: 0 0 24px rgba(245, 201, 95, .42), 0 0 70px rgba(245, 201, 95, .2);
+      }
+
+      .state {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 650;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      button {
+        min-height: 52px;
+        border: 0;
+        border-radius: 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform .15s ease, filter .15s ease, opacity .15s ease;
+      }
+
+      button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+      button:focus-visible { outline: 3px solid #b8c7ff; outline-offset: 3px; }
+      button:disabled { cursor: wait; opacity: .6; }
+
+      .turn-on { background: #d8e2ff; color: #182343; }
+      .turn-off { border: 1px solid rgba(255, 255, 255, .13); background: #292e3d; color: #f4f6fb; }
+
+      .message {
+        min-height: 24px;
+        margin: 18px 0 0;
+        color: #a9b0c2;
+        font-size: .9rem;
+        text-align: center;
+      }
+
+      .message.error { color: #ff9b9b; }
+
+      @media (max-width: 420px) {
+        .panel { padding: 28px 22px; }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <main class="panel">
+      <p class="eyebrow">Device controls</p>
+      <h1>LED control</h1>
+      <p class="intro">Switch your connected light on or off from this dashboard.</p>
+
+      <section class="light-display" aria-label="LED status">
+        <div class="bulb" id="bulb" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18h6M10 22h4M8.5 14.5A7 7 0 1 1 15.5 14.5c-.8.7-1.2 1.4-1.4 2.5h-4.2c-.2-1.1-.6-1.8-1.4-2.5Z"/>
+          </svg>
+        </div>
+        <p class="state" id="state" aria-live="polite">Status not synced</p>
+      </section>
+
+      <div class="actions">
+        <button class="turn-on" id="on-button" type="button">Turn on</button>
+        <button class="turn-off" id="off-button" type="button">Turn off</button>
+      </div>
+      <p class="message" id="message" role="status">Ready</p>
+    </main>
+
+    <script>
+      const bulb = document.getElementById("bulb");
+      const state = document.getElementById("state");
+      const message = document.getElementById("message");
+      const buttons = document.querySelectorAll("button");
+      let isOn = false;
+
+      async function setLed(on) {
+        buttons.forEach((button) => { button.disabled = true; });
+        message.classList.remove("error");
+        message.textContent = `Turning ${on ? "on" : "off"}…`;
+
+        try {
+          const value = on ? 255 : 0;
+          const response = await fetch("/api/v1/light/brightness", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ledon: on, red: value, green: value, blue: value }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Device returned HTTP ${response.status}`);
+          }
+
+          isOn = on;
+          bulb.classList.toggle("is-on", isOn);
+          state.textContent = `LED is ${isOn ? "on" : "off"}`;
+          message.textContent = "Command sent successfully";
+        } catch (error) {
+          message.classList.add("error");
+          message.textContent = error instanceof Error
+            ? `Could not reach the device: ${error.message}`
+            : "Could not reach the device";
+        } finally {
+          buttons.forEach((button) => { button.disabled = false; });
+        }
+      }
+
+      document.getElementById("on-button").addEventListener("click", () => setLed(true));
+      document.getElementById("off-button").addEventListener("click", () => setLed(false));
+    </script>
   </body>
 </html>

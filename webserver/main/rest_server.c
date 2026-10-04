@@ -13,6 +13,7 @@
 #include "esp_check.h"
 #include "esp_vfs.h"
 #include "cJSON.h"
+#include "led_controller.h"
 
 static const char *TAG = "esp-rest";
 
@@ -122,10 +123,12 @@ static esp_err_t light_brightness_post_handler(httpd_req_t *req)
     buf[total_len] = '\0';
 
     cJSON *root = cJSON_Parse(buf);
+    bool ledon = cJSON_GetObjectItem(root, "ledon")->valueint;
     int red = cJSON_GetObjectItem(root, "red")->valueint;
     int green = cJSON_GetObjectItem(root, "green")->valueint;
     int blue = cJSON_GetObjectItem(root, "blue")->valueint;
-    ESP_LOGI(TAG, "Light control: red = %d, green = %d, blue = %d", red, green, blue);
+    ESP_LOGI(TAG, "Light control: ledon = %d, red = %d, green = %d, blue = %d", ledon, red, green, blue);
+    control_light(ledon, red, green, blue);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
     return ESP_OK;
