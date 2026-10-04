@@ -6,13 +6,13 @@ Command cheatsheet for this codebase:
 `source esp-idf/export.sh`
 
 ### Set the target for the hardware
-- `idf.py set-target esp32s3`
+`idf.py set-target esp32s3`
 
 ### Builds the code
-- `idf.py build`
+`idf.py build`
 
 ### Builds and flashes
-- `idf.py -p PORT flash`
+`idf.py -p PORT flash`
 
 ### Builds, flashes, and opens the serial monitor over UART
-- `idf.py -p PORT flash monitor`
+`idf.py -p PORT flash monitor`
