@@ -1,0 +1,13 @@
+# Compilation output
+build/
+
+# Component manager files
+managed_components/
+dependencies.lock
+
+# Ignore local SDK runtime config files
+sdkconfig
+sdkconfig.old
+
+# IDE
+.vscode/
