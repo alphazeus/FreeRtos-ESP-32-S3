@@ -16,7 +16,7 @@
         -webkit-font-smoothing: antialiased;
         --muted: #9299ad;
         --line: rgba(255, 255, 255, .09);
-        --accent: #b7a4ff;
+        --accent: #sb7a4ff;
       }
 
       * { box-sizing: border-box; }
@@ -126,10 +126,7 @@
       }
 
       .dashboard {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.03fr);
-        gap: 18px;
-        align-items: stretch;
+        display: block;
       }
 
       .card {
@@ -141,19 +138,28 @@
 
       .preview-card {
         display: flex;
-        min-height: 480px;
+        min-height: 390px;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 34px;
+        padding: 24px;
+        border-right: 1px solid var(--line);
         overflow: hidden;
         position: relative;
+      }
+
+      .control-layout {
+        display: grid;
+        grid-template-columns: minmax(190px, .72fr) minmax(0, 1.28fr);
+        gap: 32px;
+        align-items: center;
+        padding: 32px;
       }
 
       .preview-card::before {
         position: absolute;
         inset: 0;
-        background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--light-color) 13%, transparent), transparent 48%);
+        background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--light-color) 13%, transparent), transparent 58%);
         content: "";
         pointer-events: none;
         transition: background .25s ease;
@@ -164,7 +170,7 @@
       }
 
       .preview-label {
-        margin: 0 0 30px;
+        margin: 0 0 22px;
         color: var(--muted);
         font-size: .76rem;
         font-weight: 700;
@@ -174,8 +180,8 @@
 
       .lamp {
         display: grid;
-        width: 190px;
-        height: 190px;
+        width: 126px;
+        height: 126px;
         place-items: center;
         border: 1px solid rgba(255, 255, 255, .13);
         border-radius: 50%;
@@ -184,7 +190,7 @@
         transition: color .3s ease, background .3s ease, box-shadow .3s ease, transform .3s ease;
       }
 
-      .lamp svg { width: 82px; height: 82px; }
+      .lamp svg { width: 58px; height: 58px; }
       .lamp.is-on {
         transform: scale(1.025);
         background: color-mix(in srgb, var(--light-color) 88%, white);
@@ -196,18 +202,19 @@
       }
 
       .preview-name {
-        margin: 27px 0 5px;
-        font-size: 1.18rem;
+        margin: 21px 0 5px;
+        font-size: 1.02rem;
         font-weight: 700;
       }
 
       .preview-hint {
         margin: 0;
         color: var(--muted);
-        font-size: .86rem;
+        font-size: .78rem;
+        text-align: center;
       }
 
-      .controls-card { padding: 28px; }
+      .controls-panel { min-width: 0; }
 
       .card-heading {
         display: flex;
@@ -403,18 +410,31 @@
 
       @media (max-width: 760px) {
         body { padding: 25px 16px; }
-        .dashboard { grid-template-columns: 1fr; }
-        .preview-card { min-height: 335px; }
-        .lamp { width: 150px; height: 150px; }
-        .lamp svg { width: 68px; height: 68px; }
-        .preview-label { margin-bottom: 21px; }
+        .control-layout {
+          grid-template-columns: 1fr;
+          gap: 25px;
+          padding: 25px;
+        }
+        .preview-card {
+          min-height: 0;
+          flex-direction: row;
+          justify-content: flex-start;
+          gap: 17px;
+          padding: 0 0 22px;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .preview-label { display: none; }
+        .lamp { width: 76px; height: 76px; flex: 0 0 auto; }
+        .lamp svg { width: 38px; height: 38px; }
+        .preview-name { margin: 0 0 5px; }
+        .preview-hint { text-align: left; }
       }
 
       @media (max-width: 420px) {
         .topbar { margin-bottom: 24px; }
         .connection { padding: 8px 10px; font-size: .7rem; }
-        .controls-card { padding: 22px 19px; }
-        .preview-card { min-height: 310px; padding: 25px; }
+        .control-layout { gap: 20px; padding: 22px 19px; }
         .card-heading { margin-bottom: 22px; }
       }
 
@@ -447,61 +467,67 @@
       </section>
 
       <section class="dashboard" aria-label="RGB LED controls">
-        <article class="card preview-card" id="preview-card">
-          <p class="preview-label">Live preview</p>
-          <div class="lamp" id="lamp" aria-hidden="true">
-            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M23 43c-1.8-2.1-5-5.4-5-11a14 14 0 1 1 28 0c0 5.6-3.2 8.9-5 11-1.3 1.6-2 3.2-2 5H25c0-1.8-.7-3.4-2-5Z"/>
-              <path d="M25 53h14M28 59h8M32 3V0M8 32H4M60 32h-4M14.3 14.3l-2.1-2.1M51.8 51.8l-2.1-2.1M49.7 14.3l2.1-2.1"/>
-            </svg>
-          </div>
-          <p class="preview-name" id="preview-name">Ready to glow</p>
-          <p class="preview-hint" id="preview-hint">Choose a color to begin</p>
-        </article>
-
         <article class="card controls-card">
-          <div class="card-heading">
-            <div>
-              <h2>Light settings</h2>
-              <p class="card-description">Fine-tune your LED output</p>
+          <div class="control-layout">
+            <section class="preview-card" id="preview-card" aria-label="Live light preview">
+              <p class="preview-label">Live preview</p>
+              <div class="lamp" id="lamp" aria-hidden="true">
+                <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 43c-1.8-2.1-5-5.4-5-11a14 14 0 1 1 28 0c0 5.6-3.2 8.9-5 11-1.3 1.6-2 3.2-2 5H25c0-1.8-.7-3.4-2-5Z"/>
+                  <path d="M25 53h14M28 59h8M32 3V0M8 32H4M60 32h-4M14.3 14.3l-2.1-2.1M51.8 51.8l-2.1-2.1M49.7 14.3l2.1-2.1"/>
+                </svg>
+              </div>
+              <div>
+                <p class="preview-name" id="preview-name">Ready to glow</p>
+                <p class="preview-hint" id="preview-hint">Choose a color to begin</p>
+              </div>
+            </section>
+
+            <div class="controls-panel">
+              <div class="card-heading">
+                <div>
+                  <h2>Light settings</h2>
+                  <p class="card-description">Fine-tune your LED output</p>
+                </div>
+                <button class="power-button" id="power-button" type="button" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M12 2v10M6.2 5.8a8 8 0 1 0 11.6 0"/>
+                  </svg>
+                  <span id="power-label">Power on</span>
+                </button>
+              </div>
+
+              <label class="section-label" for="color-picker">Light color</label>
+              <div class="color-row">
+                <input class="color-picker" id="color-picker" type="color" value="#a78bfa" aria-label="Choose LED color">
+                <input class="hex-input" id="hex-input" type="text" value="#A78BFA" maxlength="7" spellcheck="false" aria-label="Hex color value">
+              </div>
+
+              <div class="presets" aria-label="Color presets">
+                <button class="preset" type="button" style="--swatch:#ffb86b" data-color="#ffb86b" aria-label="Warm amber" aria-pressed="false"></button>
+                <button class="preset" type="button" style="--swatch:#ff668a" data-color="#ff668a" aria-label="Rose" aria-pressed="false"></button>
+                <button class="preset" type="button" style="--swatch:#a78bfa" data-color="#a78bfa" aria-label="Violet" aria-pressed="true"></button>
+                <button class="preset" type="button" style="--swatch:#54c8ff" data-color="#54c8ff" aria-label="Ocean blue" aria-pressed="false"></button>
+                <button class="preset" type="button" style="--swatch:#55e0b0" data-color="#55e0b0" aria-label="Mint" aria-pressed="false"></button>
+                <button class="preset" type="button" style="--swatch:#f4f2df" data-color="#f4f2df" aria-label="Soft white" aria-pressed="false"></button>
+              </div>
+
+              <div class="range-heading">
+                <label class="section-label" for="brightness">Brightness</label>
+                <span class="range-value" id="brightness-value">80%</span>
+              </div>
+              <input id="brightness" type="range" min="1" max="100" value="80">
+              <div class="range-scale"><span>Dim</span><span>Bright</span></div>
+
+              <!-- <button class="apply-button" id="apply-button" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4"/>
+                </svg>
+                <span>Apply to LED</span>
+              </button> -->
+              <p class="feedback" id="feedback" role="status" aria-live="polite">Choose a color, then apply it to your device.</p>
             </div>
-            <button class="power-button" id="power-button" type="button" aria-pressed="false">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M12 2v10M6.2 5.8a8 8 0 1 0 11.6 0"/>
-              </svg>
-              <span id="power-label">Power on</span>
-            </button>
           </div>
-
-          <label class="section-label" for="color-picker">Light color</label>
-          <div class="color-row">
-            <input class="color-picker" id="color-picker" type="color" value="#a78bfa" aria-label="Choose LED color">
-            <input class="hex-input" id="hex-input" type="text" value="#A78BFA" maxlength="7" spellcheck="false" aria-label="Hex color value">
-          </div>
-
-          <div class="presets" aria-label="Color presets">
-            <button class="preset" type="button" style="--swatch:#ffb86b" data-color="#ffb86b" aria-label="Warm amber" aria-pressed="false"></button>
-            <button class="preset" type="button" style="--swatch:#ff668a" data-color="#ff668a" aria-label="Rose" aria-pressed="false"></button>
-            <button class="preset" type="button" style="--swatch:#a78bfa" data-color="#a78bfa" aria-label="Violet" aria-pressed="true"></button>
-            <button class="preset" type="button" style="--swatch:#54c8ff" data-color="#54c8ff" aria-label="Ocean blue" aria-pressed="false"></button>
-            <button class="preset" type="button" style="--swatch:#55e0b0" data-color="#55e0b0" aria-label="Mint" aria-pressed="false"></button>
-            <button class="preset" type="button" style="--swatch:#f4f2df" data-color="#f4f2df" aria-label="Soft white" aria-pressed="false"></button>
-          </div>
-
-          <div class="range-heading">
-            <label class="section-label" for="brightness">Brightness</label>
-            <span class="range-value" id="brightness-value">80%</span>
-          </div>
-          <input id="brightness" type="range" min="1" max="100" value="80">
-          <div class="range-scale"><span>Dim</span><span>Bright</span></div>
-
-          <button class="apply-button" id="apply-button" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4"/>
-            </svg>
-            <span>Apply to LED</span>
-          </button>
-          <p class="feedback" id="feedback" role="status" aria-live="polite">Choose a color, then apply it to your device.</p>
         </article>
       </section>
 
@@ -519,7 +545,7 @@
       const previewHint = document.getElementById("preview-hint");
       const powerButton = document.getElementById("power-button");
       const powerLabel = document.getElementById("power-label");
-      const applyButton = document.getElementById("apply-button");
+      // const applyButton = document.getElementById("apply-button");
       const feedback = document.getElementById("feedback");
       const connection = document.getElementById("connection");
       const connectionLabel = document.getElementById("connection-label");
@@ -563,8 +589,9 @@
         colorPicker.value = normalized;
         hexInput.value = normalized.toUpperCase();
         feedback.className = "feedback";
-        feedback.textContent = "Color preview updated. Apply to send it to the LED.";
+        feedback.textContent = "Color preview updated.";
         updatePreview();
+        sendSettings(true);
         return true;
       }
 
@@ -614,11 +641,11 @@
           hexInput.value = colorPicker.value.toUpperCase();
         }
       });
-      brightness.addEventListener("input", updatePreview);
+      brightness.addEventListener("input", () => sendSettings(true));
       presets.forEach((preset) => {
         preset.addEventListener("click", () => setColor(preset.dataset.color));
       });
-      applyButton.addEventListener("click", () => sendSettings(true));
+      // applyButton.addEventListener("click", () => sendSettings(true));
       powerButton.addEventListener("click", () => sendSettings(!isOn));
 
       updatePreview();
