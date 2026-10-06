@@ -41,7 +41,7 @@
 #define CAM_HEIGHT               480
 #define CAM_FRAME_BYTES          (CAM_WIDTH * CAM_HEIGHT * 2)
 #define CAM_FORMAT_NAME          "DVP_8bit_20Minput_YUV422_YUYV_640x480_6fps"
-#define CAM_CAPTURE_TIMEOUT_MS   10000
+#define CAM_CAPTURE_DURATION_MS  1000
 
 static const char *TAG = "camera_test";
 
@@ -54,7 +54,16 @@ typedef struct {
     TaskHandle_t capture_task;
     void * volatile completed_buffer;
     volatile size_t completed_size;
+    volatile TickType_t completed_at;
 } camera_frame_pool_t;
+
+typedef struct {
+    uint64_t red_sum;
+    uint64_t green_sum;
+    uint64_t blue_sum;
+    uint64_t pixel_count;
+    uint32_t frame_count;
+} rgb_average_t;
 
 static camera_frame_pool_t s_frame_pool;
 static i2c_master_bus_handle_t s_i2c_bus;
@@ -166,18 +175,79 @@ static bool IRAM_ATTR camera_frame_finished(
 
     pool->completed_buffer = trans->buffer;
     pool->completed_size = trans->received_size;
+    pool->completed_at = xTaskGetTickCountFromISR();
     vTaskNotifyGiveFromISR(pool->capture_task, &higher_priority_task_woken);
     return higher_priority_task_woken == pdTRUE;
 }
 
-static uint32_t frame_checksum(const uint8_t *data, size_t length)
+static uint8_t clamp_rgb(int value)
 {
-    uint32_t hash = 2166136261U;
-
-    for (size_t i = 0; i < length; i++) {
-        hash = (hash ^ data[i]) * 16777619U;
+    if (value < 0) {
+        return 0;
     }
-    return hash;
+    if (value > 255) {
+        return 255;
+    }
+    return (uint8_t)value;
+}
+
+static void add_yuv_pixel(rgb_average_t *average, int y, int u, int v)
+{
+    int c = y - 16;
+    int d = u - 128;
+    int e = v - 128;
+    if (c < 0) {
+        c = 0;
+    }
+
+    average->red_sum += clamp_rgb((298 * c + 409 * e + 128) >> 8);
+    average->green_sum += clamp_rgb((298 * c - 100 * d - 208 * e + 128) >> 8);
+    average->blue_sum += clamp_rgb((298 * c + 516 * d + 128) >> 8);
+    average->pixel_count++;
+}
+
+static esp_err_t accumulate_yuyv_frame(
+    rgb_average_t *average,
+    const uint8_t *frame,
+    size_t frame_size)
+{
+    if (frame_size != CAM_FRAME_BYTES || (frame_size % 4) != 0) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    for (size_t i = 0; i < frame_size; i += 4) {
+        int y0 = frame[i];
+        int u = frame[i + 1];
+        int y1 = frame[i + 2];
+        int v = frame[i + 3];
+
+        add_yuv_pixel(average, y0, u, v);
+        add_yuv_pixel(average, y1, u, v);
+    }
+    average->frame_count++;
+    return ESP_OK;
+}
+
+static void log_rgb_averages(const rgb_average_t *average)
+{
+    uint32_t red_hundredths =
+        (uint32_t)((average->red_sum * 100 + average->pixel_count / 2) /
+                   average->pixel_count);
+    uint32_t green_hundredths =
+        (uint32_t)((average->green_sum * 100 + average->pixel_count / 2) /
+                   average->pixel_count);
+    uint32_t blue_hundredths =
+        (uint32_t)((average->blue_sum * 100 + average->pixel_count / 2) /
+                   average->pixel_count);
+
+    ESP_LOGI(TAG, "Processed %" PRIu32 " frames (%" PRIu64 " pixels)",
+             average->frame_count, average->pixel_count);
+    ESP_LOGI(TAG, "Mean RGB: R=%" PRIu32 ".%02" PRIu32
+             " G=%" PRIu32 ".%02" PRIu32
+             " B=%" PRIu32 ".%02" PRIu32,
+             red_hundredths / 100, red_hundredths % 100,
+             green_hundredths / 100, green_hundredths % 100,
+             blue_hundredths / 100, blue_hundredths % 100);
 }
 
 void app_main(void)
@@ -233,26 +303,49 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_cam_ctlr_enable(camera));
     s_frame_pool.capture_task = xTaskGetCurrentTaskHandle();
     ESP_ERROR_CHECK(esp_cam_ctlr_start(camera));
-    ESP_LOGI(TAG, "Camera capture started; waiting for a frame");
+    TickType_t capture_started_at = xTaskGetTickCount();
+    TickType_t capture_duration = pdMS_TO_TICKS(CAM_CAPTURE_DURATION_MS);
+    ESP_LOGI(TAG, "Camera stream started; processing frames for %d ms",
+             CAM_CAPTURE_DURATION_MS);
 
-    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(CAM_CAPTURE_TIMEOUT_MS)) == 0) {
-        ESP_LOGE(TAG, "Timed out waiting for a camera frame");
-        ESP_ERROR_CHECK(esp_cam_ctlr_stop(camera));
-        return;
+    rgb_average_t average = {0};
+    for (;;) {
+        TickType_t elapsed = xTaskGetTickCount() - capture_started_at;
+        if (elapsed >= capture_duration) {
+            break;
+        }
+
+        TickType_t remaining = capture_duration - elapsed;
+        if (ulTaskNotifyTake(pdTRUE, remaining) == 0) {
+            break;
+        }
+
+        TickType_t frame_elapsed = s_frame_pool.completed_at - capture_started_at;
+        if (frame_elapsed > capture_duration) {
+            break;
+        }
+        if (s_frame_pool.completed_size != s_frame_pool.frame_size) {
+            ESP_LOGW(TAG, "Skipping incomplete frame: received %zu of %zu bytes",
+                     s_frame_pool.completed_size, s_frame_pool.frame_size);
+            continue;
+        }
+
+        esp_err_t process_err = accumulate_yuyv_frame(
+            &average, s_frame_pool.completed_buffer, s_frame_pool.completed_size);
+        if (process_err != ESP_OK) {
+            ESP_LOGE(TAG, "Invalid YUYV frame size: %zu",
+                     s_frame_pool.completed_size);
+            ESP_ERROR_CHECK(esp_cam_ctlr_stop(camera));
+            return;
+        }
     }
 
     ESP_ERROR_CHECK(esp_cam_ctlr_stop(camera));
-    if (s_frame_pool.completed_size != s_frame_pool.frame_size) {
-        ESP_LOGE(TAG, "Incomplete frame: received %zu of %zu bytes",
-                 s_frame_pool.completed_size, s_frame_pool.frame_size);
+    if (average.pixel_count == 0) {
+        ESP_LOGE(TAG, "No complete camera frames were received during capture");
         return;
     }
 
-    const uint32_t checksum = frame_checksum(
-        s_frame_pool.completed_buffer, s_frame_pool.completed_size);
-    ESP_LOGI(TAG,
-             "PASS: camera is running; captured %zu-byte %dx%d YUV422 frame "
-             "(FNV-1a checksum 0x%08" PRIx32 ")",
-             s_frame_pool.completed_size, CAM_WIDTH, CAM_HEIGHT, checksum);
-    ESP_LOGI(TAG, "The captured frame is held in PSRAM until reset.");
+    log_rgb_averages(&average);
+    ESP_LOGI(TAG, "One-second capture complete; frame buffers are reused.");
 }
