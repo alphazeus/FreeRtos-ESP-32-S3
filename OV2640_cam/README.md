@@ -20,9 +20,13 @@ repository root first:
 
 ```sh
 source esp-idf/export.sh
-cd esp32-cam
+cd OV2640_cam
 ```
 
 The board uses octal PSRAM. If startup reports that no camera sensor was
 detected, check the camera module connection and verify the board revision's
 SCCB and DVP wiring against the pin definitions in `main.c`.
+
+This project does not depend on ESP-IDF's camera example components. The
+camera controller and I2C drivers are built into ESP-IDF; `esp_cam_sensor` is
+the external component used to detect and configure the OV2640.

@@ -1,15 +1,21 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "driver/i2c_master.h"
 #include "esp_attr.h"
 #include "esp_cam_ctlr.h"
 #include "esp_cam_ctlr_dvp.h"
+#include "esp_cam_sensor.h"
+#include "esp_cam_sensor_detect.h"
+#include "esp_cam_sensor_types.h"
+#include "esp_check.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "example_sensor_init.h"
+#include "esp_sccb_i2c.h"
+#include "esp_sccb_intf.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -39,6 +45,8 @@
 
 static const char *TAG = "camera_test";
 
+#define CAM_SCCB_FREQ_HZ         100000
+
 typedef struct {
     uint8_t *frames[2];
     size_t frame_size;
@@ -49,6 +57,89 @@ typedef struct {
 } camera_frame_pool_t;
 
 static camera_frame_pool_t s_frame_pool;
+static i2c_master_bus_handle_t s_i2c_bus;
+static esp_cam_sensor_device_t *s_sensor;
+
+static esp_err_t initialize_sensor(void)
+{
+    const i2c_master_bus_config_t i2c_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .sda_io_num = CAM_SCCB_SDA_GPIO,
+        .scl_io_num = CAM_SCCB_SCL_GPIO,
+        .i2c_port = CAM_I2C_PORT,
+        .flags.enable_internal_pullup = true,
+    };
+    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&i2c_config, &s_i2c_bus),
+                        TAG, "failed to initialize SCCB I2C bus");
+
+    esp_cam_sensor_detect_fn_t *detect_start = NULL;
+    esp_cam_sensor_detect_fn_t *detect_end = NULL;
+    esp_cam_sensor_detect_get_array(&detect_start, &detect_end);
+
+    esp_cam_sensor_config_t sensor_config = {
+        .reset_pin = -1,
+        .pwdn_pin = -1,
+        .xclk_pin = CAM_XCLK_GPIO,
+        .sensor_port = ESP_CAM_SENSOR_DVP,
+    };
+    for (esp_cam_sensor_detect_fn_t *candidate = detect_start;
+         candidate < detect_end; candidate++) {
+        if (candidate->port != ESP_CAM_SENSOR_DVP) {
+            continue;
+        }
+
+        const sccb_i2c_config_t sccb_config = {
+            .scl_speed_hz = CAM_SCCB_FREQ_HZ,
+            .device_address = candidate->sccb_addr,
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        };
+        ESP_RETURN_ON_ERROR(
+            sccb_new_i2c_io(s_i2c_bus, &sccb_config, &sensor_config.sccb_handle),
+            TAG, "failed to initialize SCCB device");
+
+        s_sensor = candidate->detect(&sensor_config);
+        if (s_sensor != NULL) {
+            break;
+        }
+
+        ESP_RETURN_ON_ERROR(esp_sccb_del_i2c_io(sensor_config.sccb_handle),
+                            TAG, "failed to release unmatched SCCB device");
+        sensor_config.sccb_handle = NULL;
+    }
+
+    if (s_sensor == NULL) {
+        ESP_LOGE(TAG, "no DVP camera sensor detected on SCCB");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    ESP_LOGI(TAG, "Detected camera sensor: %s",
+             esp_cam_sensor_get_name(s_sensor));
+
+    esp_cam_sensor_format_array_t formats = {0};
+    ESP_RETURN_ON_ERROR(esp_cam_sensor_query_format(s_sensor, &formats),
+                        TAG, "failed to query camera formats");
+
+    const esp_cam_sensor_format_t *selected_format = NULL;
+    for (uint32_t i = 0; i < formats.count; i++) {
+        if (strcmp(formats.format_array[i].name, CAM_FORMAT_NAME) == 0) {
+            selected_format = &formats.format_array[i];
+            break;
+        }
+    }
+    if (selected_format == NULL) {
+        ESP_LOGE(TAG, "sensor does not support format %s", CAM_FORMAT_NAME);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    ESP_RETURN_ON_ERROR(esp_cam_sensor_set_format(s_sensor, selected_format),
+                        TAG, "failed to configure camera format");
+
+    int stream_enabled = 1;
+    ESP_RETURN_ON_ERROR(
+        esp_cam_sensor_ioctl(s_sensor, ESP_CAM_SENSOR_IOC_S_STREAM, &stream_enabled),
+        TAG, "failed to start camera sensor stream");
+    return ESP_OK;
+}
 
 static bool IRAM_ATTR camera_get_new_frame(
     esp_cam_ctlr_handle_t handle,
@@ -130,22 +221,7 @@ void app_main(void)
         return;
     }
 
-    example_sensor_config_t sensor_config = {
-        .i2c_port_num = CAM_I2C_PORT,
-        .i2c_sda_io_num = CAM_SCCB_SDA_GPIO,
-        .i2c_scl_io_num = CAM_SCCB_SCL_GPIO,
-        .reset_pin = -1,
-        .pwdn_pin = -1,
-        .xclk_pin = CAM_XCLK_GPIO,
-        .port = ESP_CAM_SENSOR_DVP,
-        .format_name = CAM_FORMAT_NAME,
-    };
-    example_sensor_handle_t sensor = {0};
-    example_sensor_init(&sensor_config, &sensor);
-    if (sensor.sccb_handle == NULL || sensor.i2c_bus_handle == NULL) {
-        ESP_LOGE(TAG, "Camera sensor was not detected or initialized");
-        return;
-    }
+    ESP_ERROR_CHECK(initialize_sensor());
     ESP_LOGI(TAG, "Camera sensor initialized using %s", CAM_FORMAT_NAME);
 
     const esp_cam_ctlr_evt_cbs_t callbacks = {
